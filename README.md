@@ -426,3 +426,4 @@ You can use different color formats:
 \`\`\`
 
 Hex codes are recommended for simplicity and consistency.
+DONE
