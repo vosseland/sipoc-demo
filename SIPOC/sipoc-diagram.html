@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive SIPOC Diagram</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #f5f5f5;
+            padding: 10px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            gap: 15px;
+            max-width: 100%;
+            margin: 0 auto;
+            height: 100%;
+        }
+
+        .diagram-wrapper {
+            flex: 1;
+            background: white;
+            padding: 20px 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .connections-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .sipoc-diagram {
+            min-width: 1200px;
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            min-height: 55px;
+        }
+
+        /* Made label boxes more compact */
+        .label {
+            width: 120px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            flex-shrink: 0;
+            letter-spacing: 0.3px;
+        }
+
+        .label-suppliers { background: linear-gradient(135deg, #2C5F7C, #1E4A5F); }
+        .label-inputs { background: linear-gradient(135deg, #3A6B6F, #285254); }
+        .label-process { background: linear-gradient(135deg, #5B7B3F, #4A6332); }
+        .label-outputs { background: linear-gradient(135deg, #C67C3B, #A86428); }
+        .label-customers { background: linear-gradient(135deg, #8B4A5A, #6E3A47); }
+
+        .items-container {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            align-items: center;
+            position: relative;
+            flex-wrap: wrap;
+        }
+
+        /* Reduced node sizes and adjusted spacing for better canvas fit */
+        .item {
+            min-width: 110px;
+            max-width: 180px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 22px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            padding: 0 14px;
+            white-space: normal;
+            line-height: 1.2;
+        }
+
+        .item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .item.active {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        }
+
+        .supplier { background: #2C5F7C; }
+        .input { background: #3A6B6F; }
+        .process-step { 
+            background: #5B7B3F;
+            color: white;
+        }
+        .output { background: #C67C3B; }
+        
+        .customer-item {
+            min-width: 110px;
+            max-width: 180px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 22px;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
+            background: #8B4A5A;
+            color: white;
+            padding: 0 14px;
+            white-space: normal;
+            line-height: 1.2;
+        }
+
+        .customer-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .customer-item.active {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        }
+
+        .side-panel {
+            width: 380px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 25px;
+            transition: all 0.3s ease;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+
+        .side-panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .panel-header {
+            padding: 18px;
+            border-radius: 8px;
+            color: white;
+            margin-bottom: 18px;
+        }
+
+        .panel-title {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .panel-category {
+            font-size: 13px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .panel-content h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .panel-content p {
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .panel-content ul {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 16px;
+        }
+
+        .panel-content li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .panel-content li:last-child {
+            border-bottom: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 1400px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .side-panel {
+                width: 100%;
+                max-height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <script id="embedded-data" type="application/json">
+{
+  "suppliers": [
+    {
+      "id": "supplier1",
+      "name": "Suppliers 1",
+      "description": "Raw Material Vendors",
+      "details": "Primary suppliers of steel, aluminum, and composite materials for manufacturing operations.",
+      "requirements": ["ISO 9001 certified", "Lead time: 2-3 weeks", "Minimum order quantity: 500 units"]
+    },
+    {
+      "id": "supplier2",
+      "name": "Suppliers 2",
+      "description": "Component Manufacturers",
+      "details": "Specialized manufacturers providing precision-engineered components and electronic parts.",
+      "requirements": ["Quality assurance testing", "Just-in-time delivery capability", "Technical support available"]
+    },
+    {
+      "id": "supplier3",
+      "name": "Suppliers 3",
+      "description": "Logistics Partners",
+      "details": "Third-party logistics providers handling freight, warehousing, and distribution services.",
+      "requirements": ["Global shipping network", "Real-time tracking systems", "Insurance coverage included"]
+    },
+    {
+      "id": "supplier4",
+      "name": "Suppliers 4",
+      "description": "Technology Vendors",
+      "details": "Software and hardware vendors providing enterprise systems, automation tools, and IT infrastructure.",
+      "requirements": ["24/7 technical support", "Regular software updates", "Data security compliance"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "input1",
+      "name": "Inputs 1",
+      "description": "Raw Materials",
+      "details": "High-grade steel, aluminum alloys, and composite materials meeting industry specifications.",
+      "specifications": ["Material grade: A36 steel", "Purity: 99.5% minimum", "Delivery format: Bulk containers"]
+    },
+    {
+      "id": "input2",
+      "name": "Inputs 2",
+      "description": "Component Parts",
+      "details": "Pre-manufactured components including circuit boards, sensors, and mechanical assemblies.",
+      "specifications": ["Quality certified", "Standard packaging", "Documentation included"]
+    },
+    {
+      "id": "input3",
+      "name": "Inputs 3",
+      "description": "Customer Orders",
+      "details": "Purchase orders received through online portal, email, or EDI systems with detailed specifications.",
+      "specifications": ["Digital order format", "Complete specifications", "Payment terms agreed"]
+    },
+    {
+      "id": "input4",
+      "name": "Inputs 4",
+      "description": "Labor Resources",
+      "details": "Skilled technicians, engineers, and production staff with relevant certifications and training.",
+      "specifications": ["Certified professionals", "Safety trained", "Experience: 3+ years"]
+    },
+    {
+      "id": "input5",
+      "name": "Inputs 5",
+      "description": "Equipment & Tools",
+      "details": "Manufacturing machinery, precision tools, testing equipment, and quality control instruments.",
+      "specifications": ["Calibrated equipment", "Maintenance schedule current", "Safety compliance verified"]
+    },
+    {
+      "id": "input6",
+      "name": "Inputs 6",
+      "description": "Technical Documentation",
+      "details": "Engineering drawings, work instructions, quality standards, and regulatory compliance documents.",
+      "specifications": ["Current revision status", "Digitally accessible", "Version controlled"]
+    },
+    {
+      "id": "input7",
+      "name": "Inputs 7",
+      "description": "Energy & Utilities",
+      "details": "Electrical power, water, compressed air, and climate control systems for manufacturing operations.",
+      "specifications": ["Uninterrupted power supply", "Backup generators available", "Environmental controls active"]
+    },
+    {
+      "id": "input8",
+      "name": "Inputs 8",
+      "description": "Quality Standards",
+      "details": "Industry regulations, customer specifications, and internal quality benchmarks for all processes.",
+      "specifications": ["ISO compliance requirements", "Customer-specific standards", "Regulatory guidelines"]
+    }
+  ],
+  "process": [
+    {
+      "id": "start",
+      "name": "START",
+      "description": "Process Initiation",
+      "details": "Order received and validated. Customer requirements reviewed, feasibility assessed, and project resources allocated.",
+      "activities": ["Order validation", "Requirements analysis", "Resource allocation", "Timeline establishment"]
+    },
+    {
+      "id": "step1",
+      "name": "Step 1",
+      "description": "Planning & Design",
+      "details": "Engineering team creates detailed product specifications, CAD models, and manufacturing plans based on customer requirements.",
+      "activities": ["Create technical drawings", "Material selection", "Process planning", "Risk assessment"]
+    },
+    {
+      "id": "step2",
+      "name": "Step 2",
+      "description": "Material Procurement",
+      "details": "Purchase orders issued to suppliers. Raw materials and components received, inspected, and stored in inventory.",
+      "activities": ["Supplier selection", "Purchase order creation", "Goods receiving", "Quality inspection"]
+    },
+    {
+      "id": "step3",
+      "name": "Step 3",
+      "description": "Manufacturing",
+      "details": "Production operations including cutting, forming, assembly, and integration of components according to specifications.",
+      "activities": ["Material preparation", "Machining operations", "Assembly processes", "In-process inspections"]
+    },
+    {
+      "id": "step4",
+      "name": "Step 4",
+      "description": "Quality Control",
+      "details": "Comprehensive testing and inspection to ensure products meet all specifications and quality standards.",
+      "activities": [
+        "Dimensional inspection",
+        "Functional testing",
+        "Compliance verification",
+        "Documentation completion"
+      ]
+    },
+    {
+      "id": "step5",
+      "name": "Step 5",
+      "description": "Packaging & Shipping",
+      "details": "Finished products packaged according to shipping requirements and dispatched to customers with tracking information.",
+      "activities": [
+        "Protective packaging",
+        "Labeling and documentation",
+        "Shipping coordination",
+        "Delivery confirmation"
+      ]
+    },
+    {
+      "id": "end",
+      "name": "END",
+      "description": "Process Completion",
+      "details": "Customer receives products, invoice generated, payment processed, and satisfaction feedback collected.",
+      "activities": ["Customer delivery", "Invoice processing", "Payment collection", "Feedback gathering"]
+    }
+  ],
+  "outputs": [
+    {
+      "id": "output1",
+      "name": "Output 1",
+      "description": "Finished Products",
+      "details": "Fully manufactured and tested products ready for customer use, meeting all specifications and quality standards.",
+      "deliverables": ["Physical products", "Quality certificates", "Warranty documentation", "User manuals"]
+    },
+    {
+      "id": "output2",
+      "name": "Output 2",
+      "description": "Technical Documentation",
+      "details": "Complete set of documentation including test reports, certificates of conformance, and operational guides.",
+      "deliverables": ["Test reports", "Compliance certificates", "Installation guides", "Maintenance manuals"]
+    },
+    {
+      "id": "output3",
+      "name": "Output 3",
+      "description": "Delivery Confirmation",
+      "details": "Proof of delivery documentation, tracking information, and customer sign-off acknowledging receipt.",
+      "deliverables": ["Delivery receipts", "Tracking reports", "Customer acknowledgment", "Shipping documents"]
+    },
+    {
+      "id": "output4",
+      "name": "Output 4",
+      "description": "Invoices & Reports",
+      "details": "Financial documentation including itemized invoices, payment terms, and project completion reports.",
+      "deliverables": ["Detailed invoices", "Project summaries", "Cost breakdowns", "Payment instructions"]
+    },
+    {
+      "id": "output5",
+      "name": "Output 5",
+      "description": "Customer Support",
+      "details": "Ongoing technical support, warranty service, maintenance programs, and customer service resources.",
+      "deliverables": ["Support contact information", "Warranty terms", "Maintenance schedules", "Training resources"]
+    }
+  ],
+  "customers": [
+    {
+      "id": "customer1",
+      "name": "Customer 1",
+      "description": "Automotive Industry",
+      "details": "Major automotive manufacturers requiring precision-engineered components for vehicle production lines.",
+      "segment": "Industrial Manufacturing"
+    },
+    {
+      "id": "customer2",
+      "name": "Customer 2",
+      "description": "Aerospace Sector",
+      "details": "Aerospace companies needing high-tolerance parts and components meeting strict aviation regulations.",
+      "segment": "Aerospace & Defense"
+    },
+    {
+      "id": "customer3",
+      "name": "Customer 3",
+      "description": "Electronics Manufacturers",
+      "details": "Consumer electronics companies requiring specialized components for devices and equipment.",
+      "segment": "Technology & Electronics"
+    },
+    {
+      "id": "customer4",
+      "name": "Customer 4",
+      "description": "Medical Device Companies",
+      "details": "Healthcare organizations producing medical equipment requiring FDA-compliant manufacturing processes.",
+      "segment": "Healthcare & Medical"
+    },
+    {
+      "id": "customer5",
+      "name": "Customer 5",
+      "description": "Energy Sector",
+      "details": "Renewable energy companies and utility providers requiring components for power generation systems.",
+      "segment": "Energy & Utilities"
+    },
+    {
+      "id": "customer6",
+      "name": "Customer 6",
+      "description": "Construction Industry",
+      "details": "Commercial builders and contractors needing structural components and building materials.",
+      "segment": "Construction & Infrastructure"
+    }
+  ],
+  "connections": [
+    {
+      "from": "supplier1",
+      "to": ["input1", "input2"]
+    },
+    {
+      "from": "supplier2",
+      "to": ["input2", "input5"]
+    },
+    {
+      "from": "supplier3",
+      "to": ["input7"]
+    },
+    {
+      "from": "supplier4",
+      "to": ["input6", "input8"]
+    },
+    {
+      "from": "input1",
+      "to": ["step2", "step3"]
+    },
+    {
+      "from": "input2",
+      "to": ["step3"]
+    },
+    {
+      "from": "input3",
+      "to": ["start", "step1"]
+    },
+    {
+      "from": "input4",
+      "to": ["step1", "step3", "step4"]
+    },
+    {
+      "from": "input5",
+      "to": ["step3"]
+    },
+    {
+      "from": "input6",
+      "to": ["step1", "step4"]
+    },
+    {
+      "from": "input7",
+      "to": ["step3"]
+    },
+    {
+      "from": "input8",
+      "to": ["step4"]
+    },
+    {
+      "from": "step5",
+      "to": ["output1", "output2"]
+    },
+    {
+      "from": "end",
+      "to": ["output3", "output4", "output5"]
+    },
+    {
+      "from": "output1",
+      "to": ["customer1", "customer2", "customer3"]
+    },
+    {
+      "from": "output2",
+      "to": ["customer1", "customer2", "customer4"]
+    },
+    {
+      "from": "output3",
+      "to": ["customer1", "customer2", "customer3", "customer4", "customer5", "customer6"]
+    },
+    {
+      "from": "output4",
+      "to": ["customer1", "customer2", "customer3", "customer4", "customer5", "customer6"]
+    },
+    {
+      "from": "output5",
+      "to": ["customer1", "customer2", "customer3", "customer4"]
+    }
+  ]
+}
+    </script>
+
+    <div class="container">
+        <div class="diagram-wrapper">
+            <div class="sipoc-diagram" id="sipocDiagram"></div>
+        </div>
+        
+        <div class="side-panel hidden" id="sidePanel">
+            <div class="empty-state">
+                <div class="empty-state-icon">👈</div>
+                <p>Click on any element to view detailed information</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sipocData = null;
+
+        // Load JSON data from embedded script tag for testing
+        const embeddedData = document.getElementById('embedded-data');
+        if (embeddedData) {
+            sipocData = JSON.parse(embeddedData.textContent);
+            renderDiagram();
+        } else {
+            // Fallback to external file if embedded data not found
+            fetch('sipoc-data.json')
+                .then(response => response.json())
+                .then(data => {
+                    sipocData = data;
+                    renderDiagram();
+                })
+                .catch(error => console.error('Error loading data:', error));
+        }
+
+        function renderDiagram() {
+            const diagram = document.getElementById('sipocDiagram');
+            
+            // Render Suppliers
+            diagram.innerHTML += createRow(
+                'Suppliers',
+                sipocData.suppliers,
+                'supplier',
+                'label-suppliers'
+            );
+
+            // Render Inputs
+            diagram.innerHTML += createRow(
+                'Inputs',
+                sipocData.inputs,
+                'input',
+                'label-inputs'
+            );
+
+            // Render Process
+            diagram.innerHTML += createProcessRow();
+
+            // Render Outputs
+            diagram.innerHTML += createRow(
+                'Outputs',
+                sipocData.outputs,
+                'output',
+                'label-outputs'
+            );
+
+            // Render Customers
+            diagram.innerHTML += createCustomersRow();
+
+            // Add event listeners
+            addEventListeners();
+
+            setTimeout(() => drawConnections(), 100);
+        }
+
+        function createRow(label, items, className, labelClass) {
+            return `
+                <div class="row">
+                    <div class="label ${labelClass}">
+                        <div>${label}</div>
+                    </div>
+                    <div class="items-container">
+                        ${items.map(item => `
+                            <div class="item ${className}" data-id="${item.id}" data-category="${label.toLowerCase()}">
+                                ${item.name}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function createProcessRow() {
+            const steps = sipocData.process;
+            return `
+                <div class="row">
+                    <div class="label label-process">
+                        <div>Process</div>
+                    </div>
+                    <div class="items-container">
+                        ${steps.map(step => `
+                            <div class="item process-step" data-id="${step.id}" data-category="process">
+                                ${step.name}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function createCustomersRow() {
+            const customers = sipocData.customers;
+            return `
+                <div class="row">
+                    <div class="label label-customers">
+                        <div>Customers</div>
+                    </div>
+                    <div class="items-container">
+                        ${customers.map(customer => `
+                            <div class="customer-item" data-id="${customer.id}" data-category="customers">
+                                ${customer.name}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function drawConnections() {
+            if (!sipocData.connections) return;
+
+            const diagram = document.getElementById('sipocDiagram');
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.classList.add('connections-canvas');
+            svg.style.position = 'absolute';
+            svg.style.top = '0';
+            svg.style.left = '0';
+            svg.style.width = '100%';
+            svg.style.height = '100%';
+            svg.style.pointerEvents = 'none';
+            svg.style.zIndex = '0';
+            
+            diagram.appendChild(svg);
+
+            sipocData.connections.forEach(connection => {
+                const fromElement = document.querySelector(`[data-id="${connection.from}"]`);
+                if (!fromElement) return;
+
+                const targets = Array.isArray(connection.to) ? connection.to : [connection.to];
+                
+                targets.forEach(toId => {
+                    const toElement = document.querySelector(`[data-id="${toId}"]`);
+                    if (!toElement) return;
+
+                    const fromRect = fromElement.getBoundingClientRect();
+                    const toRect = toElement.getBoundingClientRect();
+                    const diagramRect = diagram.getBoundingClientRect();
+
+                    const x1 = fromRect.left + fromRect.width / 2 - diagramRect.left;
+                    const y1 = fromRect.top + fromRect.height / 2 - diagramRect.top;
+                    const x2 = toRect.left + toRect.width / 2 - diagramRect.left;
+                    const y2 = toRect.top + toRect.height / 2 - diagramRect.top;
+
+                    const controlX = (x1 + x2) / 2;
+                    const controlY = (y1 + y2) / 2;
+                    
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const d = `M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`;
+                    path.setAttribute('d', d);
+                    path.setAttribute('stroke', '#8E9AAF');
+                    path.setAttribute('stroke-width', '2');
+                    path.setAttribute('opacity', '0.5');
+                    path.setAttribute('fill', 'none');
+                    
+                    svg.appendChild(path);
+                });
+            });
+        }
+
+        function addEventListeners() {
+            const items = document.querySelectorAll('.item, .customer-item');
+            items.forEach(item => {
+                item.addEventListener('click', () => {
+                    // Remove active class from all items
+                    items.forEach(i => i.classList.remove('active'));
+                    // Add active class to clicked item
+                    item.classList.add('active');
+                    
+                    const id = item.dataset.id;
+                    const category = item.dataset.category;
+                    showDetails(id, category);
+
+                    highlightConnections(id);
+                });
+            });
+        }
+
+        function highlightConnections(nodeId) {
+            const svg = document.querySelector('.connections-canvas');
+            if (!svg) return;
+
+            const paths = svg.querySelectorAll('path');
+            paths.forEach(path => {
+                path.setAttribute('opacity', '0.2');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke', '#8E9AAF');
+            });
+
+            if (!sipocData.connections) return;
+
+            sipocData.connections.forEach((connection, index) => {
+                const targets = Array.isArray(connection.to) ? connection.to : [connection.to];
+                let pathIndex = 0;
+
+                for (let i = 0; i < sipocData.connections.indexOf(connection); i++) {
+                    const prevTargets = Array.isArray(sipocData.connections[i].to) ? 
+                        sipocData.connections[i].to : [sipocData.connections[i].to];
+                    pathIndex += prevTargets.length;
+                }
+
+                targets.forEach((toId, targetIndex) => {
+                    if (connection.from === nodeId || toId === nodeId) {
+                        const path = paths[pathIndex + targetIndex];
+                        if (path) {
+                            path.setAttribute('opacity', '0.9');
+                            path.setAttribute('stroke-width', '3');
+                            path.setAttribute('stroke', '#C67C3B');
+                        }
+                    }
+                });
+            });
+        }
+
+        function showDetails(id, category) {
+            const panel = document.getElementById('sidePanel');
+            const item = sipocData[category].find(i => i.id === id);
+            
+            if (!item) return;
+
+            const colors = {
+                suppliers: '#2C5F7C',
+                inputs: '#3A6B6F',
+                process: '#5B7B3F',
+                outputs: '#C67C3B',
+                customers: '#8B4A5A'
+            };
+
+            let detailsHTML = '';
+            
+            if (item.details) {
+                detailsHTML = `<h3>Details</h3><p>${item.details}</p>`;
+            }
+
+            const connections = getConnectionsForNode(id);
+            if (connections.incoming.length > 0 || connections.outgoing.length > 0) {
+                detailsHTML += '<h3>Connections</h3>';
+                
+                if (connections.incoming.length > 0) {
+                    detailsHTML += `
+                        <p><strong>Receives from:</strong></p>
+                        <ul>${connections.incoming.map(conn => `<li>${conn}</li>`).join('')}</ul>
+                    `;
+                }
+                
+                if (connections.outgoing.length > 0) {
+                    detailsHTML += `
+                        <p><strong>Provides to:</strong></p>
+                        <ul>${connections.outgoing.map(conn => `<li>${conn}</li>`).join('')}</ul>
+                    `;
+                }
+            }
+
+            if (item.requirements && item.requirements.length > 0) {
+                detailsHTML += `
+                    <h3>Requirements</h3>
+                    <ul>${item.requirements.map(req => `<li>${req}</li>`).join('')}</ul>
+                `;
+            }
+
+            if (item.activities && item.activities.length > 0) {
+                detailsHTML += `
+                    <h3>Activities</h3>
+                    <ul>${item.activities.map(act => `<li>${act}</li>`).join('')}</ul>
+                `;
+            }
+
+            if (item.deliverables && item.deliverables.length > 0) {
+                detailsHTML += `
+                    <h3>Deliverables</h3>
+                    <ul>${item.deliverables.map(del => `<li>${del}</li>`).join('')}</ul>
+                `;
+            }
+
+            if (item.segment) {
+                detailsHTML += `<h3>Segment</h3><p>${item.segment}</p>`;
+            }
+
+            panel.innerHTML = `
+                <div class="panel-header" style="background: ${colors[category]}">
+                    <div class="panel-category">${category}</div>
+                    <div class="panel-title">${item.name}</div>
+                </div>
+                <div class="panel-content">
+                    ${detailsHTML}
+                </div>
+            `;
+
+            panel.classList.remove('hidden');
+        }
+
+        function getConnectionsForNode(nodeId) {
+            const incoming = [];
+            const outgoing = [];
+
+            if (!sipocData.connections) return { incoming, outgoing };
+
+            sipocData.connections.forEach(connection => {
+                const targets = Array.isArray(connection.to) ? connection.to : [connection.to];
+                
+                if (connection.from === nodeId) {
+                    targets.forEach(toId => {
+                        const targetElement = findNodeById(toId);
+                        if (targetElement) {
+                            outgoing.push(targetElement.name);
+                        }
+                    });
+                }
+                
+                if (targets.includes(nodeId)) {
+                    const sourceElement = findNodeById(connection.from);
+                    if (sourceElement) {
+                        incoming.push(sourceElement.name);
+                    }
+                }
+            });
+
+            return { incoming, outgoing };
+        }
+
+        function findNodeById(id) {
+            for (const category of ['suppliers', 'inputs', 'process', 'outputs', 'customers']) {
+                const item = sipocData[category].find(i => i.id === id);
+                if (item) return item;
+            }
+            return null;
+        }
+    </script>
+</body>
+</html>
