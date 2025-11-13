@@ -6,6 +6,8 @@ This guide explains how to edit the JSON data embedded in the SIPOC diagram temp
 
 The SIPOC diagram uses a JSON data structure embedded in the HTML file within a `<script>` tag with `id="embedded-data"`. You can edit this data directly in the HTML file to customize your diagram.
 
+<span style="color: dodgerblue;">VICKY WUZ HERE! ^-^ </span>
+
 ## JSON Structure
 
 The data is organized into five main sections:
